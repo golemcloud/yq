@@ -4,9 +4,23 @@ import (
 	"bytes"
 	"container/list"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 )
+
+// RunSystemCommand runs a system operator command with stdin as its standard
+// input and returns its standard output and standard error. Embedders that
+// cannot start processes replace it; the default runs the host command.
+var RunSystemCommand = func(command string, args []string, stdin io.Reader) ([]byte, string, error) {
+	// #nosec G204 - intentional: user must explicitly enable this operator
+	cmd := exec.Command(command, args...)
+	cmd.Stdin = stdin
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
+	return output, stderr.String(), err
+}
 
 func resolveSystemArgs(argsNode *CandidateNode) ([]string, error) {
 	if argsNode == nil {
@@ -117,15 +131,9 @@ func systemOperator(d *dataTreeNavigator, context Context, expressionNode *Expre
 		}
 		stdin.WriteString(encoded)
 
-		// #nosec G204 - intentional: user must explicitly enable this operator
-		cmd := exec.Command(command, args...)
-		cmd.Stdin = &stdin
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-
-		output, err := cmd.Output()
+		output, stderr, err := RunSystemCommand(command, args, &stdin)
 		if err != nil {
-			stderrStr := strings.TrimSpace(stderr.String())
+			stderrStr := strings.TrimSpace(stderr)
 			if stderrStr != "" {
 				return Context{}, fmt.Errorf("system command '%v' failed: %w\nstderr: %v", command, err, stderrStr)
 			}
