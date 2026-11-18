@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 )
 
@@ -48,13 +46,13 @@ $ yq completion fish > ~/.config/fish/completions/yq.fish
 		var err error = nil
 		switch args[0] {
 		case "bash":
-			err = cmd.Root().GenBashCompletionV2(os.Stdout, true)
+			err = cmd.Root().GenBashCompletionV2(cmd.OutOrStdout(), true)
 		case "zsh":
-			err = cmd.Root().GenZshCompletion(os.Stdout)
+			err = cmd.Root().GenZshCompletion(cmd.OutOrStdout())
 		case "fish":
-			err = cmd.Root().GenFishCompletion(os.Stdout, true)
+			err = cmd.Root().GenFishCompletion(cmd.OutOrStdout(), true)
 		case "powershell":
-			err = cmd.Root().GenPowerShellCompletion(os.Stdout)
+			err = cmd.Root().GenPowerShellCompletion(cmd.OutOrStdout())
 		}
 		return err
 

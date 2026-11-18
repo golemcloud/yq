@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mattn/go-isatty"
 	"github.com/mikefarah/yq/v4/pkg/yqlib"
 	"github.com/spf13/cobra"
 )
@@ -46,10 +45,9 @@ func initCommand(cmd *cobra.Command, args []string) (string, []string, error) {
 }
 
 func setupColors() {
-	fd := os.Stdout.Fd()
 	// os.Stdout can be a regular file, pipe, or other character device such
 	// as /dev/null - only a real terminal should get colourised output.
-	if forceColor || (!forceNoColor && (isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd))) {
+	if forceColor || (!forceNoColor && yqlib.StdoutIsTerminal()) {
 		colorsEnabled = true
 	}
 }
@@ -253,11 +251,7 @@ func maybeFile(str string) bool {
 }
 
 func processStdInArgs(args []string) []string {
-	stat, err := os.Stdin.Stat()
-	if err != nil {
-		yqlib.GetLogger().Debugf("error getting stdin: %v", err)
-	}
-	pipingStdin := stat != nil && (stat.Mode()&os.ModeCharDevice) == 0
+	pipingStdin := yqlib.StdinIsPiped()
 
 	// if we've been given a file, don't automatically
 	// read from stdin.

@@ -80,7 +80,7 @@ yq -P -oy sample.json
 
 			yqlib.GetLogger().SetLevel(level)
 			opts := &slog.HandlerOptions{Level: level, AddSource: verbose}
-			handler := slog.NewTextHandler(os.Stderr, opts)
+			handler := slog.NewTextHandler(yqlib.StderrWriter, opts)
 			yqlib.GetLogger().SetSlogger(slog.New(handler))
 
 			yqlib.InitExpressionParser()

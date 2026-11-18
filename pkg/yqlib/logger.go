@@ -3,7 +3,6 @@ package yqlib
 import (
 	"fmt"
 	"log/slog"
-	"os"
 )
 
 // Logger wraps log/slog providing a printf-style interface used throughout yq.
@@ -15,7 +14,7 @@ type Logger struct {
 func newLogger() *Logger {
 	l := &Logger{}
 	l.levelVar.Set(slog.LevelWarn)
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: &l.levelVar})
+	handler := slog.NewTextHandler(StderrWriter, &slog.HandlerOptions{Level: &l.levelVar})
 	l.slogger = slog.New(handler)
 	return l
 }
