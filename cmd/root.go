@@ -223,7 +223,7 @@ yq -P -oy sample.json
 	rootCmd.AddCommand(
 		createEvaluateSequenceCommand(),
 		createEvaluateAllCommand(),
-		completionCmd,
+		createCompletionCmd(),
 	)
 	return rootCmd
 }

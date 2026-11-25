@@ -264,3 +264,24 @@ func TestNew_FlagCompletions(t *testing.T) {
 		}
 	}
 }
+
+func TestNew_CompletionWritesToEachCommandsOutput(t *testing.T) {
+	var first, second strings.Builder
+	for _, run := range []struct {
+		shell string
+		out   *strings.Builder
+	}{{"bash", &first}, {"zsh", &second}} {
+		c := New()
+		c.SetOut(run.out)
+		c.SetArgs([]string{"completion", run.shell})
+		if err := c.Execute(); err != nil {
+			t.Fatalf("completion %s: %v", run.shell, err)
+		}
+	}
+	if !strings.Contains(first.String(), "bash completion") || strings.Contains(first.String(), "#compdef") {
+		t.Errorf("first command's output is not only the bash script (%d bytes)", first.Len())
+	}
+	if !strings.Contains(second.String(), "#compdef") {
+		t.Errorf("second command's output has no zsh script (%d bytes)", second.Len())
+	}
+}
