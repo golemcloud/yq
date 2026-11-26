@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"io"
 	"strings"
 	"testing"
+
+	"github.com/mikefarah/yq/v4/pkg/yqlib"
 )
 
 func TestNewRuneVar(t *testing.T) {
@@ -339,5 +342,57 @@ func TestNew_FlagsDoNotCarryOverToTheNextCommand(t *testing.T) {
 				t.Errorf("second command printed %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNew_UsesTheStdioAndSystemHooks(t *testing.T) {
+	stdin, piped, stderr, runSystem := yqlib.Stdin, yqlib.StdinIsPiped, yqlib.Stderr, yqlib.RunSystemCommand
+	t.Cleanup(func() {
+		yqlib.Stdin, yqlib.StdinIsPiped, yqlib.Stderr, yqlib.RunSystemCommand = stdin, piped, stderr, runSystem
+		New()
+	})
+	run := func(args ...string) string {
+		t.Helper()
+		var out strings.Builder
+		c := New()
+		c.SetOut(&out)
+		c.SetArgs(args)
+		if err := c.Execute(); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		return out.String()
+	}
+
+	yqlib.StdinIsPiped = func() bool { return true }
+	yqlib.Stdin = strings.NewReader("a: piped\n")
+	if got := run("eval", ".a"); got != "piped\n" {
+		t.Errorf("piped input printed %q", got)
+	}
+	yqlib.StdinIsPiped = func() bool { return false }
+	yqlib.Stdin = strings.NewReader("a: dash\n")
+	if got := run("eval", ".a", "-"); got != "dash\n" {
+		t.Errorf("\"-\" printed %q", got)
+	}
+
+	var gotCommand string
+	var gotArgs []string
+	var gotStdin []byte
+	yqlib.RunSystemCommand = func(command string, args []string, stdin io.Reader) ([]byte, string, error) {
+		gotCommand, gotArgs = command, args
+		gotStdin, _ = io.ReadAll(stdin)
+		return []byte("hooked\n"), "", nil
+	}
+	if got := run("eval", "-n", "--security-enable-system-operator", `"in" | system("cmd"; "arg")`); got != "hooked\n" {
+		t.Errorf("system printed %q", got)
+	}
+	if gotCommand != "cmd" || len(gotArgs) != 1 || gotArgs[0] != "arg" || strings.TrimSpace(string(gotStdin)) != "in" {
+		t.Errorf("system hook got command %q, args %q, stdin %q", gotCommand, gotArgs, gotStdin)
+	}
+
+	var logs strings.Builder
+	yqlib.Stderr = &logs
+	run("eval", "-n", "-v", "1")
+	if !strings.Contains(logs.String(), "level=DEBUG") {
+		t.Errorf("verbose log did not reach Stderr: %q", logs.String())
 	}
 }
