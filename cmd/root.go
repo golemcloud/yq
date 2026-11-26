@@ -37,7 +37,34 @@ func (r *runeValue) Type() string {
 	return "char"
 }
 
+// resetGlobalState restores the package-level state that flags and earlier
+// runs change, so that each command built by New starts from the defaults.
+func resetGlobalState() {
+	unwrapScalarFlag = newUnwrapFlag()
+	unwrapScalar = false
+	forceNoColor = false
+	colorsEnabled = false
+	completedSuccessfully = false
+
+	yqlib.ConfiguredXMLPreferences = yqlib.NewDefaultXmlPreferences()
+	yqlib.ConfiguredCsvPreferences = yqlib.NewDefaultCsvPreferences()
+	yqlib.ConfiguredTsvPreferences = yqlib.NewDefaultTsvPreferences()
+	yqlib.ConfiguredLuaPreferences = yqlib.NewDefaultLuaPreferences()
+	yqlib.ConfiguredINIPreferences = yqlib.NewDefaultINIPreferences()
+	yqlib.ConfiguredPropertiesPreferences = yqlib.NewDefaultPropertiesPreferences()
+	yqlib.ConfiguredShellVariablesPreferences = yqlib.NewDefaultShellVariablesPreferences()
+	yqlib.ConfiguredYamlPreferences = yqlib.NewDefaultYamlPreferences()
+	yqlib.ConfiguredKYamlPreferences = yqlib.NewDefaultKYamlPreferences()
+	yqlib.ConfiguredJSONPreferences = yqlib.NewDefaultJsonPreferences()
+	yqlib.ConfiguredHclPreferences = yqlib.NewDefaultHclPreferences()
+	yqlib.ConfiguredTomlPreferences = yqlib.NewDefaultTomlPreferences()
+	yqlib.ConfiguredSecurityPreferences = yqlib.SecurityPreferences{}
+	yqlib.StringInterpolationEnabled = true
+}
+
 func New() *cobra.Command {
+	resetGlobalState()
+
 	var rootCmd = &cobra.Command{
 		Use:   "yq",
 		Short: "yq is a lightweight and portable command-line data file processor.",
@@ -80,7 +107,7 @@ yq -P -oy sample.json
 
 			yqlib.GetLogger().SetLevel(level)
 			opts := &slog.HandlerOptions{Level: level, AddSource: verbose}
-			handler := slog.NewTextHandler(os.Stderr, opts)
+			handler := slog.NewTextHandler(yqlib.StderrWriter, opts)
 			yqlib.GetLogger().SetSlogger(slog.New(handler))
 
 			yqlib.InitExpressionParser()
@@ -223,7 +250,7 @@ yq -P -oy sample.json
 	rootCmd.AddCommand(
 		createEvaluateSequenceCommand(),
 		createEvaluateAllCommand(),
-		completionCmd,
+		createCompletionCmd(),
 	)
 	return rootCmd
 }

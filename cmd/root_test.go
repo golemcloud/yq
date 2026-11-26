@@ -1,8 +1,11 @@
 package cmd
 
 import (
+	"io"
 	"strings"
 	"testing"
+
+	"github.com/mikefarah/yq/v4/pkg/yqlib"
 )
 
 func TestNewRuneVar(t *testing.T) {
@@ -262,5 +265,134 @@ func TestNew_FlagCompletions(t *testing.T) {
 		if flag == nil {
 			t.Errorf("Expected flag %q to exist", flagName)
 		}
+	}
+}
+
+func TestNew_CompletionWritesToEachCommandsOutput(t *testing.T) {
+	var first, second strings.Builder
+	for _, run := range []struct {
+		shell string
+		out   *strings.Builder
+	}{{"bash", &first}, {"zsh", &second}} {
+		c := New()
+		c.SetOut(run.out)
+		c.SetArgs([]string{"completion", run.shell})
+		if err := c.Execute(); err != nil {
+			t.Fatalf("completion %s: %v", run.shell, err)
+		}
+	}
+	if !strings.Contains(first.String(), "bash completion") || strings.Contains(first.String(), "#compdef") {
+		t.Errorf("first command's output is not only the bash script (%d bytes)", first.Len())
+	}
+	if !strings.Contains(second.String(), "#compdef") {
+		t.Errorf("second command's output has no zsh script (%d bytes)", second.Len())
+	}
+}
+
+func TestNew_FlagsDoNotCarryOverToTheNextCommand(t *testing.T) {
+	// Other tests in this package read the flag variables directly.
+	t.Cleanup(func() { New() })
+	run := func(args ...string) string {
+		t.Helper()
+		var out, errs strings.Builder
+		c := New()
+		c.SetOut(&out)
+		c.SetErr(&errs)
+		c.SetArgs(args)
+		if err := c.Execute(); err != nil {
+			t.Fatalf("%v: %v (%s)", args, err, errs.String())
+		}
+		return out.String()
+	}
+	tests := []struct {
+		name   string
+		first  []string
+		second []string
+		want   string
+	}{
+		{
+			name:   "colors",
+			first:  []string{"eval", "-n", "-C", `{"a": "b"}`},
+			second: []string{"eval", "-n", "-M", `{"a": "b"}`},
+			want:   "a: b\n",
+		},
+		{
+			name:   "unwrap scalar",
+			first:  []string{"eval", "-n", "-r=false", `"x" | . style="double"`},
+			second: []string{"eval", "-n", `"x" | . style="double"`},
+			want:   "x\n",
+		},
+		{
+			name:   "shell escaping",
+			first:  []string{"eval", "-n", "-o=shell", "-r", "--security-force-never-escape-shell-output", `{"a": "$(id)"}`},
+			second: []string{"eval", "-n", "-o=shell", "-r", `{"a": "$(id)"}`},
+			want:   "a='$(id)'\n",
+		},
+		{
+			name:   "xml attribute prefix",
+			first:  []string{"eval", "-n", "-o=xml", "--xml-attribute-prefix=@@", `{"a": {"@@x": "1"}}`},
+			second: []string{"eval", "-n", "-o=xml", `{"a": {"+@x": "1"}}`},
+			want:   "<a x=\"1\"></a>\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			run(tt.first...)
+			if got := run(tt.second...); got != tt.want {
+				t.Errorf("second command printed %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNew_UsesTheStdioAndSystemHooks(t *testing.T) {
+	stdin, piped, stderr, runSystem := yqlib.Stdin, yqlib.StdinIsPiped, yqlib.Stderr, yqlib.RunSystemCommand
+	t.Cleanup(func() {
+		yqlib.Stdin, yqlib.StdinIsPiped, yqlib.Stderr, yqlib.RunSystemCommand = stdin, piped, stderr, runSystem
+		New()
+	})
+	run := func(args ...string) string {
+		t.Helper()
+		var out strings.Builder
+		c := New()
+		c.SetOut(&out)
+		c.SetArgs(args)
+		if err := c.Execute(); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		return out.String()
+	}
+
+	yqlib.StdinIsPiped = func() bool { return true }
+	yqlib.Stdin = strings.NewReader("a: piped\n")
+	if got := run("eval", ".a"); got != "piped\n" {
+		t.Errorf("piped input printed %q", got)
+	}
+	yqlib.StdinIsPiped = func() bool { return false }
+	yqlib.Stdin = strings.NewReader("a: dash\n")
+	if got := run("eval", ".a", "-"); got != "dash\n" {
+		t.Errorf("\"-\" printed %q", got)
+	}
+
+	var gotCommand string
+	var gotArgs []string
+	var gotStdin []byte
+	yqlib.RunSystemCommand = func(command string, args []string, stdin io.Reader) ([]byte, string, error) {
+		gotCommand, gotArgs = command, args
+		gotStdin, _ = io.ReadAll(stdin)
+		return []byte("hooked\n"), "", nil
+	}
+	if got := run("eval", "-n", "--security-enable-system-operator", `"in" | system("cmd"; "arg")`); got != "hooked\n" {
+		t.Errorf("system printed %q", got)
+	}
+	if gotCommand != "cmd" || len(gotArgs) != 1 || gotArgs[0] != "arg" || strings.TrimSpace(string(gotStdin)) != "in" {
+		t.Errorf("system hook got command %q, args %q, stdin %q", gotCommand, gotArgs, gotStdin)
+	}
+
+	var logs strings.Builder
+	yqlib.Stderr = &logs
+	run("eval", "-n", "-v", "1")
+	if !strings.Contains(logs.String(), "level=DEBUG") {
+		t.Errorf("verbose log did not reach Stderr: %q", logs.String())
 	}
 }

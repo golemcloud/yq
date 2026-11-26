@@ -37,7 +37,7 @@ func resolveFilename(filename string) string {
 // for stdin.
 func readStream(filename string) (io.Reader, func(), error) {
 	if filename == "-" {
-		return bufio.NewReader(os.Stdin), func() {}, nil
+		return bufio.NewReader(Stdin), func() {}, nil
 	}
 	// ignore CWE-22 gosec issue - that's more targeted for http based apps that run in a public directory,
 	// and ensuring that it's not possible to give a path to a file outside that directory.

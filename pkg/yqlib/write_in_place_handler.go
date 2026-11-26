@@ -30,7 +30,7 @@ func (w *writeInPlaceHandlerImpl) CreateTempFile() (*os.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	if entryInfo.Mode()&os.ModeSymlink == 0 && info.Mode().Perm()&0o222 == 0 {
+	if isReadOnlyFile(entryInfo, info, w.inputFilename) {
 		return nil, fmt.Errorf("cannot write in place to read-only file %q", w.inputFilename)
 	}
 

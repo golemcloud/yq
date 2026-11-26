@@ -58,7 +58,7 @@ func (f *frontMatterHandlerImpl) Split() error {
 	var reader *bufio.Reader
 	var err error
 	if f.originalFilename == "-" {
-		reader = bufio.NewReader(stripUTF8BOM(os.Stdin))
+		reader = bufio.NewReader(stripUTF8BOM(Stdin))
 	} else {
 		file, err := os.Open(f.originalFilename) // #nosec
 		if err != nil {
