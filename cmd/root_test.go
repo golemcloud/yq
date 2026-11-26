@@ -285,3 +285,59 @@ func TestNew_CompletionWritesToEachCommandsOutput(t *testing.T) {
 		t.Errorf("second command's output has no zsh script (%d bytes)", second.Len())
 	}
 }
+
+func TestNew_FlagsDoNotCarryOverToTheNextCommand(t *testing.T) {
+	// Other tests in this package read the flag variables directly.
+	t.Cleanup(func() { New() })
+	run := func(args ...string) string {
+		t.Helper()
+		var out, errs strings.Builder
+		c := New()
+		c.SetOut(&out)
+		c.SetErr(&errs)
+		c.SetArgs(args)
+		if err := c.Execute(); err != nil {
+			t.Fatalf("%v: %v (%s)", args, err, errs.String())
+		}
+		return out.String()
+	}
+	tests := []struct {
+		name   string
+		first  []string
+		second []string
+		want   string
+	}{
+		{
+			name:   "colors",
+			first:  []string{"eval", "-n", "-C", `{"a": "b"}`},
+			second: []string{"eval", "-n", "-M", `{"a": "b"}`},
+			want:   "a: b\n",
+		},
+		{
+			name:   "unwrap scalar",
+			first:  []string{"eval", "-n", "-r=false", `"x" | . style="double"`},
+			second: []string{"eval", "-n", `"x" | . style="double"`},
+			want:   "x\n",
+		},
+		{
+			name:   "shell escaping",
+			first:  []string{"eval", "-n", "-o=shell", "-r", "--security-force-never-escape-shell-output", `{"a": "$(id)"}`},
+			second: []string{"eval", "-n", "-o=shell", "-r", `{"a": "$(id)"}`},
+			want:   "a='$(id)'\n",
+		},
+		{
+			name:   "xml attribute prefix",
+			first:  []string{"eval", "-n", "-o=xml", "--xml-attribute-prefix=@@", `{"a": {"@@x": "1"}}`},
+			second: []string{"eval", "-n", "-o=xml", `{"a": {"+@x": "1"}}`},
+			want:   "<a x=\"1\"></a>\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			run(tt.first...)
+			if got := run(tt.second...); got != tt.want {
+				t.Errorf("second command printed %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
